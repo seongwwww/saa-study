@@ -23,6 +23,12 @@ test('stale device cannot revert a submitted exam and duplicate submissions keep
  assert.equal(result.sessions[0].answers[q1][0],'A');assert.equal(result.attempts[0].selected[0],'A');assert.equal(result.activeSessionId,null);
  assert.equal(mergeStudy(b,local,r).sessions[0].submittedAt,r.sessions[0].submittedAt);
 });
+test('concurrent submissions with different skipped questions do not create phantom graded attempts',()=>{
+ const b=fresh();b.sessions=[{id:'exam',ids:[q1,q2],answers:{},position:0,mode:'quiz',startedAt:new Date().toISOString()}];b.activeSessionId='exam';
+ const l=structuredClone(b),r=structuredClone(b);l.sessions[0].answers[q1]=['A'];r.sessions[0].answers[q2]=['B'];
+ const result=mergeStudy(b,submitSession(l,'exam',questions),submitSession(r,'exam',questions));
+ assert.equal(result.attempts.length,1);assert.equal(result.attempts[0].qid,q2);assert.equal(result.sessions[0].answers[q1],undefined);
+});
 function harness(initial:RemoteRecord|null=null){
  let remote=initial,disk:SyncRecord|null=null,online=true;
  const adapter:SyncAdapter={read:async revision=>{if(!online)throw Error('offline');return remote?.revision===revision?'unchanged':structuredClone(remote);},

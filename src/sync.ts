@@ -46,6 +46,9 @@ export function mergeStudy(base: StudyState, local: StudyState, remote: StudySta
   const attempts=mergeRecords(base.attempts,local.attempts,remote.attempts,(_b,l,r)=>{
     const s=sessionMap.get(l.sessionId);
     return s && same(s.answers[l.qid],l.selected) && !same(s.answers[r.qid],r.selected)?l:r;
+  }).filter(a=>{
+    const session=sessionMap.get(a.sessionId);
+    return !session?.submittedAt || same(session.answers[a.qid],a.selected);
   }).sort((a,b)=>a.at.localeCompare(b.at)||a.id.localeCompare(b.id));
   const cursor=(s:StudyState)=>({studyIndex:s.studyIndex,studyOrder:s.studyOrder,studyDraft:s.studyDraft});
   const active=choose(base.activeSessionId,local.activeSessionId,remote.activeSessionId);
