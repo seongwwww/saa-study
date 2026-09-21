@@ -3,24 +3,29 @@ import { BookOpen, ChevronLeft, ChevronRight, Cloud, Home, RotateCcw, Bookmark, 
 import { QuestionCard, QuestionNote } from './QuestionCard';
 import { Dashboard, SessionSetup, Collection, Results, HistoryView, SettingsView, PageHeading } from './views';
 import { freshState, getStatus, isCorrect, shuffled, submitSession, validateBackup, type Question, type StudyState, type Progress, type Session } from './model';
-import { loadState, saveState } from './store';
 import { loadQuestionBank } from './bank';
+import { useAuth } from './Auth';
+import { useStudyStorage } from './useStudyStorage';
+import { AccountPanel } from './AccountPanel';
 import { MockExamSetup, DomainPicker, ExamClock } from './MockExam';
 import { buildMockExam } from './domains';
 import { startRandomStudy, studySequence, expireMockExams } from './model';
 type View = 'home' | 'study' | 'setup' | 'quiz' | 'review' | 'bookmarks' | 'history' | 'settings' | 'results' | 'mock';
 const navigation = [ ['home',Home,'학습 홈'], ['study',BookOpen,'공부하기'], ['setup',ClipboardList,'문제 풀기'], ['mock',GraduationCap,'모의고사'], ['review',RotateCcw,'오답노트'], ['bookmarks',Bookmark,'북마크'], ['history',History,'학습 기록'] ] as const;
 export default function App() {
-  const [questions,setQuestions] = useState<Question[]>([]), [state,setState] = useState<StudyState>(freshState);
+  const [questions,setQuestions] = useState<Question[]>([]);
+  const {user}=useAuth();
   const [bankId,setBankId] = useState('local');
-  const [ready,setReady] = useState(false), [error,setError] = useState(''), [saving,setSaving] = useState(false);
+  const {state,setState,ready,status,error:storageError,syncNow}=useStudyStorage(questions,bankId,user?.id);
+  const [loadError,setLoadError]=useState('');
+  const error=loadError||storageError,saving=status==='saving';
   const [view,setView] = useState<View>('home'), [resultId,setResultId] = useState<string|null>(null);
   const [notice,setNotice] = useState(''), [confirm,setConfirm] = useState<{title:string;body:string;label:string;action:()=>void}|null>(null);
   const [gridPage,setGridPage] = useState(0), [jump,setJump] = useState('1');
-  const saveSequence = useRef(0), stateRef = useRef(state), questionsRef = useRef(questions);
+  const stateRef = useRef(state), questionsRef = useRef(questions);
   stateRef.current=state; questionsRef.current=questions;
-  useEffect(() => { loadQuestionBank().then(async data => { const key=data.id||'local';const s=await loadState(key);const validated=validateBackup({app:'saa-study',state:s},data.questions,key);setBankId(key);setQuestions(data.questions);setState({...expireMockExams(validated,data.questions),bankId:key});setGridPage(Math.floor((validated.studyOrder?validated.studyOrder.indexOf(data.questions[validated.studyIndex].id):validated.studyIndex)/50));setReady(true); }).catch(()=>setError('자료나 저장된 기록을 불러오지 못했습니다. 새로고침하거나 다른 브라우저에서 열어주세요.')); },[]);
-  useEffect(() => { if(!ready)return; const seq=++saveSequence.current;setSaving(true);saveState(state,bankId).then(()=>{if(seq===saveSequence.current){setSaving(false);setError('');}}).catch(()=>{setError('기록을 저장하지 못했습니다. 설정에서 백업 파일을 먼저 내려받아 주세요.');setSaving(false);}); },[state,ready,bankId]);
+  useEffect(() => {let live=true;loadQuestionBank().then(data=>{if(live){setBankId(data.id||'local');setQuestions(data.questions);}}).catch(()=>{if(live)setLoadError('문제집을 불러오지 못했습니다. 새로고침해 주세요.');});return()=>{live=false;};},[]);
+  useEffect(()=>{if(ready)setGridPage(Math.floor((state.studyOrder?state.studyOrder.indexOf(questions[state.studyIndex].id):state.studyIndex)/50));},[ready,state.studyIndex,state.studyOrder,questions]);
   useEffect(() => { if(!notice)return;const id=setTimeout(()=>setNotice(''),4000);return()=>clearTimeout(id); },[notice]);
   useEffect(() => {setJump(String(state.studyIndex+1));},[state.studyIndex]);
   const stats=useMemo(()=>{
@@ -81,9 +86,9 @@ export default function App() {
   const moveStudy=(delta:number)=>openStudy(questions.findIndex(x=>x.id===order[studyPosition+delta]));
   const fontControls=<div className="font-controls"><Type size={15}/><button aria-label="글자 작게" disabled={state.fontSize<=16} onClick={()=>setState(s=>({...s,fontSize:s.fontSize-1}))}>−</button><span>{state.fontSize}</span><button aria-label="글자 크게" disabled={state.fontSize>=22} onClick={()=>setState(s=>({...s,fontSize:s.fontSize+1}))}>+</button></div>;
   return <div className="app-shell"><aside className="sidebar"><div className="brand"><span className="brand-icon"><BookOpen size={21}/></span><div>SAA <span>Study</span><small>나의 AWS 공부방</small></div></div><div className="nav-caption">WORKSPACE</div><nav aria-label="주 메뉴">{navigation.map(([key,Icon,label])=><button key={key} className={view===key||(key==='mock'&&(view==='quiz'?active?.mode==='mock':view==='results'&&state.sessions.find(s=>s.id===resultId)?.mode==='mock'))||(key==='setup'&&(view==='quiz'?active?.mode!=='mock':view==='results'&&state.sessions.find(s=>s.id===resultId)?.mode!=='mock'))?'active':''} onClick={()=>navigate(key)}><Icon size={18}/>{label}{key==='review'&&stats.review.length>0&&<span className="nav-count">{stats.review.length}</span>}</button>)}<button className={`settings-nav ${view==='settings'?'active':''}`} onClick={()=>navigate('settings')}><Settings size={18}/>설정 및 백업</button></nav><div className="sidebar-bottom"><Cloud size={18}/><span>나의 속도로, 한 문제씩.<small>AWS SAA-C03 · {questions.length} questions</small></span></div></aside>
-    <div className="workspace"><header className="topbar"><span>내 학습 공간 <span className="breadcrumb">/ {currentLabel}</span></span><span className={`local-status ${error?'save-error':''}`}><CheckCircle2 size={14}/>{error?'저장 상태 확인 필요':saving?'저장 중…':'이 기기에 자동 저장'}</span></header><main>
+    <div className="workspace"><header className="topbar"><span>내 학습 공간 <span className="breadcrumb">/ {currentLabel}</span></span><span className={`local-status ${error?'save-error':''}`}><CheckCircle2 size={14}/>{error?'동기화 상태 확인 필요':saving?(user?'클라우드 저장 중…':'저장 중…'):user?'클라우드 동기화 완료':'이 기기에 자동 저장'}</span></header><main>
     {error&&<div className="error-banner" role="alert"><AlertCircle size={18}/>{error}</div>}
-    {bankId==='demo-v1'&&<div className="resume-banner"><span>체험용 문제로 실행 중입니다. 내 PDF를 추가하면 개인 문제집으로 공부할 수 있어요.</span><a href="https://github.com/seongwwww/saa-study#내-pdf-가져오기" target="_blank" rel="noreferrer">가져오는 방법</a></div>}
+    {bankId==='demo-v1'&&<div className="resume-banner"><span>체험용 문제로 실행 중입니다. 내 PDF를 추가하면 개인 문제집으로 공부할 수 있어요.</span><a href="https://github.com/seongwwww/saa-study-room#내-pdf-가져오기" target="_blank" rel="noreferrer">가져오는 방법</a></div>}
     {view==='home'&&<Dashboard questions={questions} state={state} reviewCount={stats.review.length} done={stats.done} studied={stats.studied} correct={stats.correct} active={active} onStudy={()=>openStudy(state.studyIndex)} onSetup={()=>navigate('setup')} onResume={()=>navigate('quiz')} onReview={()=>navigate('review')} onStart={()=>startSession(shuffled(questions.filter(x=>!stats.status.get(x.id)?.attempts.length)).slice(0,20).map(x=>x.id),'quiz')}/>}
     {view==='study'&&<><PageHeading eyebrow="LEARN AT YOUR PACE" title="한 문제씩, 확실하게." description="먼저 생각하고, 정답과 해설을 확인해 보세요." action={fontControls}/><div className="study-order-bar"><div><strong>{state.studyOrder?'랜덤 학습':'번호순 학습'}</strong><span>{state.studyOrder?`중복 없이 ${questions.length}문제 · 순서와 위치 자동 저장`:'문제 번호 순서대로 차근차근 공부해요.'}</span></div><div><button className="button secondary" disabled={!state.studyOrder} onClick={()=>{setState(s=>({...s,studyOrder:undefined}));setGridPage(Math.floor(state.studyIndex/50));}}>번호순</button><button className="button primary" onClick={shuffleStudy}><Shuffle size={16}/>{state.studyOrder?'전체 다시 섞기':`전체 ${questions.length}문제 섞기`}</button></div></div><div className="study-layout study-with-notes"><div><div className="study-toolbar"><span>{state.studyOrder?'랜덤 순서':'전체 문제'} <b>{studyPosition+1} / {questions.length}</b>{state.studyOrder&&<small> · 원문 Q{q.number}</small>}</span><form className="jump-form" onSubmit={e=>{e.preventDefault();const n=Number(jump);if(Number.isInteger(n)&&n>=1&&n<=questions.length)openStudy(n-1);else setNotice(`1~${questions.length} 사이 번호를 입력해 주세요.`);}}><label htmlFor="jump">문제 이동</label><input id="jump" type="number" min={1} max={questions.length} value={jump} onChange={e=>setJump(e.target.value)}/><button type="submit" aria-label="입력한 문제로 이동"><ArrowRight size={15}/></button></form></div>
       <QuestionCard showNote={false} question={q} selected={draft?.selected||[]} revealed={draft?.revealed||false} locked={draft?.graded} onSelect={key=>setState(s=>({...s,studyDraft:{qid:q.id,selected:toggleAnswer(q,s.studyDraft?.qid===q.id?s.studyDraft.selected:[],key),revealed:false,graded:false}}))} onReveal={reveal} onHide={()=>setState(s=>({...s,studyDraft:s.studyDraft?{...s.studyDraft,revealed:false}:undefined}))} progress={state.progress[q.id]||{}} onProgress={patch=>progress(q.id,patch)} fontSize={state.fontSize}/>
@@ -95,7 +100,7 @@ export default function App() {
     {(view==='review'||view==='bookmarks')&&<Collection key={view} kind={view} questions={questions} state={state} onStudy={openStudy} onStart={ids=>startSession(ids,'review')} onProgress={progress}/>}
     {view==='results'&&<Results key={resultId} session={state.sessions.find(s=>s.id===resultId)} questions={questions} state={state} onProgress={progress} onRetry={ids=>startSession(ids,'review')} onHome={()=>navigate('home')}/>}
     {view==='history'&&<HistoryView state={state} questions={questions} onResults={id=>{setResultId(id);navigate('results');}} onResume={id=>{setState(s=>({...s,activeSessionId:id}));navigate('quiz');}} onStudy={openStudy}/>}
-    {view==='settings'&&<SettingsView state={state} questions={questions} onFont={size=>setState(s=>({...s,fontSize:size}))} onImport={s=>setConfirm({title:'백업 기록으로 복원할까요?',body:`현재 기록을 백업 파일의 기록으로 교체합니다. 풀이 ${s.attempts.length}회, 세트 ${s.sessions.length}개가 들어 있습니다. 현재 기록을 보관하려면 취소 후 먼저 백업해 주세요.`,label:'백업으로 복원',action:()=>{setState(s);setNotice('학습 기록을 복원했습니다.');}})} onNotice={setNotice}/>}
+    {view==='settings'&&<><AccountPanel state={state} questions={questions} status={status} onSync={syncNow} onNotice={setNotice} onImport={s=>setConfirm({title:'기존 기록을 계정에 합칠까요?',body:'이 브라우저의 기존 풀이와 메모를 현재 로그인한 계정에 가져옵니다. 다른 사람의 기록이 아닌지 확인해 주세요.',label:'내 기록 가져오기',action:()=>setState(s)})}/><SettingsView state={state} questions={questions} onFont={size=>setState(s=>({...s,fontSize:size}))} onImport={s=>setConfirm({title:'백업 기록으로 복원할까요?',body:`현재 기록을 백업 파일의 기록으로 교체합니다. 풀이 ${s.attempts.length}회, 세트 ${s.sessions.length}개가 들어 있습니다. 현재 기록을 보관하려면 취소 후 먼저 백업해 주세요.`,label:'백업으로 복원',action:()=>{setState(s);setNotice('학습 기록을 복원했습니다.');}})} onNotice={setNotice}/></>}
     </main></div>{notice&&<div className="toast" role="status"><CheckCircle2 size={18}/>{notice}<button aria-label="알림 닫기" onClick={()=>setNotice('')}><X size={15}/></button></div>}{confirm&&<ConfirmDialog {...confirm} onClose={()=>setConfirm(null)} onConfirm={()=>{const action=confirm.action;setConfirm(null);action();}}/>}</div>;
 }
 function ConfirmDialog({title,body,label,onClose,onConfirm}:{title:string;body:string;label:string;onClose:()=>void;onConfirm:()=>void}) {
