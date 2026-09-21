@@ -9,8 +9,6 @@ AWS 공식 서비스 또는 공식 문제집이 아닙니다.
 
 ## 휴대폰·웹에서 바로 공부하기
 
-**[SAA Study 열기](https://seongwwww.github.io/saa-study/)**
-
 GitHub Pages로 무료 배포한 웹사이트입니다. PC 서버를 켜두지 않아도 휴대폰과 PC 브라우저에서 접속할 수 있습니다. 현재 공개판은 725문제, 도표와 원본 PDF를 포함하며 랜덤 학습, 모의고사, 오답노트와 필기를 지원합니다. 문제집은 공개 URL에서 내려받을 수 있습니다.
 
 학습 기록은 각 기기·브라우저에 따로 저장됩니다. 기존 로컬 앱의 **설정 및 백업 → 백업 내려받기**로 기록을 저장한 뒤, 공개 사이트에서 **백업 불러오기**를 사용하면 옮길 수 있습니다. 자동 동기화는 지원하지 않습니다. 휴대폰 브라우저의 ‘홈 화면에 추가’를 사용하면 편하게 다시 열 수 있습니다.
@@ -22,8 +20,8 @@ GitHub Pages로 무료 배포한 웹사이트입니다. PC 서버를 켜두지 �
 Node.js **22.14 이상**과 Git이 필요합니다. Windows, macOS, Linux에서 다음 명령을 실행하세요.
 
 ```sh
-git clone https://github.com/seongwwww/saa-study.git
-cd saa-study
+git clone https://github.com/seongwwww/saa-study-room.git
+cd saa-study-room
 npm ci
 npm start
 ```
