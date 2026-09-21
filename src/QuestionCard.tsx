@@ -1,9 +1,9 @@
 import { Bookmark, Check, CheckCircle2, ExternalLink, Eye, EyeOff, Flag, XCircle } from 'lucide-react';
 import type { Progress, Question } from './model';
 import { isCorrect } from './model';
-export function QuestionCard({ question: q, selected, revealed, onSelect, onReveal, onHide, locked = false, progress, onProgress, fontSize, resultOnly = false }: {
+export function QuestionCard({ question: q, selected, revealed, onSelect, onReveal, onHide, locked = false, progress, onProgress, fontSize, resultOnly = false, showNote = true }: {
   question: Question; selected: string[]; revealed: boolean; onSelect: (key: string) => void;
-  onReveal?: () => void; onHide?: () => void; locked?: boolean; progress: Progress; onProgress: (patch: Partial<Progress>) => void; fontSize: number; resultOnly?: boolean;
+  onReveal?: () => void; onHide?: () => void; locked?: boolean; progress: Progress; onProgress: (patch: Partial<Progress>) => void; fontSize: number; resultOnly?: boolean; showNote?: boolean;
 }) {
   const correct = isCorrect(selected, q.answer);
   return <article className="question-card" style={{ '--question-font': `${fontSize}px` } as React.CSSProperties}>
@@ -30,10 +30,15 @@ export function QuestionCard({ question: q, selected, revealed, onSelect, onReve
       <div className="explanation"><div className="section-eyebrow">해설 · 문제집 기준 채점</div>{q.explanation.length ? q.explanation.map((p,i) => <div className="explanation-paragraph" key={i}><RichText text={p}/></div>) : <p className="muted">이 문제에는 별도 해설이 없습니다. 원문과 참고 자료를 확인해 주세요.</p>}
         {!!q.links.length && <div className="reference-links">{q.links.map((url,i) => <a key={i} href={url} target="_blank" rel="noreferrer">참고 자료 {i+1} <ExternalLink size={13}/></a>)}</div>}
       </div>
-      <label className="note-label" htmlFor={`note-${q.id}`}>나의 한 줄 정리 <span>자동 저장</span></label><textarea id={`note-${q.id}`} maxLength={20000} value={progress.note || ''} onChange={e => onProgress({note:e.target.value})} placeholder="놓쳤던 조건이나 기억할 개념을 적어보세요." rows={3}/>
+      {showNote && <QuestionNote question={q} progress={progress} onProgress={onProgress}/>}
       {onHide && <button className="reveal-button" onClick={onHide}><EyeOff size={16}/>정답·해설 접기</button>}
     </section>}
   </article>;
+}
+export function QuestionNote({ question, progress, onProgress }: {
+  question: Question; progress: Progress; onProgress: (patch: Partial<Progress>) => void;
+}) {
+  return <><label className="note-label" htmlFor={`note-${question.id}`}>나의 한 줄 정리 <span>자동 저장</span></label><textarea key={question.id} id={`note-${question.id}`} maxLength={20000} value={progress.note || ''} onChange={e => onProgress({note:e.target.value})} placeholder="풀이 과정, 헷갈린 조건, 기억할 개념을 자유롭게 적어보세요." rows={3}/></>;
 }
 function linkify(text: string) { return text.split(/(https?:\/\/[^\s]+)/g).map((p,i) => /^https?:\/\//.test(p) ? <a key={i} href={p} target="_blank" rel="noreferrer">{p}</a> : p); }
 function RichText({text}:{text:string}) { return <>{text.split(/(\[\[image:[^\]]+\]\])/g).map((part,i) => { const match=part.match(/^\[\[image:(.+)\]\]$/); return match ? <img key={i} className="pdf-image" src={`./${match[1]}`} alt="원문에 포함된 코드 또는 도표" loading="lazy"/> : <span key={i}>{linkify(part)}</span>; })}</>; }

@@ -7,6 +7,7 @@ export function validateBank(input: unknown): QuestionBank {
   const seen = new Set<string>();
   b.questions.forEach((q,i) => {
     if (!q || typeof q.id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(q.id) || seen.has(q.id) || q.number !== i+1 || !Number.isInteger(q.sourceNumber) || !Number.isInteger(q.pageStart) || q.pageStart < 0 || !Number.isInteger(q.pageEnd) || q.pageEnd < q.pageStart || typeof q.prompt !== 'string' || !q.prompt.trim() || !Array.isArray(q.choices) || q.choices.length < 2 || new Set(q.choices.map(c=>c.key)).size !== q.choices.length || q.choices.some(c=>!c || !/^[A-F]$/.test(c.key) || typeof c.text !== 'string' || !c.text.trim()) || !Array.isArray(q.answer) || !q.answer.length || new Set(q.answer).size !== q.answer.length || !q.answer.every(k=>q.choices.some(c=>c.key===k)) || !Array.isArray(q.explanation) || !q.explanation.every(p=>typeof p==='string') || !Array.isArray(q.links) || !q.links.every(url=>typeof url==='string' && /^https?:\/\//.test(url))) throw Error(`${i+1}번 문제의 형식이 올바르지 않습니다.`);
+    if(q.domain !== undefined && !['security','resilience','performance','cost'].includes(q.domain)) throw Error('문제 영역이 올바르지 않습니다.');
     seen.add(q.id);
   });
   return b;

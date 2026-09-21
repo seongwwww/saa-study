@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { freshState, getStatus, isCorrect, submitSession, validateBackup, type Question, type StudyState } from './model.ts';
 import { validateBank } from './bank.ts';
+import { buildMockExam, classifyQuestion, DOMAINS, examAllocation } from './domains.ts';
+import { expireMockExams, startRandomStudy, studySequence, type Domain } from './model.ts';
 const questions: Question[]=JSON.parse(readFileSync(new URL('./demo-bank.json',import.meta.url),'utf8')).questions;
 test('question-bank validation rejects empty banks and missing choice content',()=>{
   assert.equal(validateBank({version:1,id:'demo-v1',title:'Demo',questions}).questions.length,3);
@@ -36,4 +38,54 @@ test('backup round trip preserves drafts, notes and in-progress sessions; reject
   assert.throws(()=>validateBackup({app:'saa-study',state:{...freshState(),studyIndex:questions.length}},questions));
   assert.throws(()=>validateBackup({app:'saa-study',state:{...freshState(),activeSessionId:'missing'}},questions));
   assert.throws(()=>validateBackup({app:'saa-study',state:{...freshState(),bankId:'another-bank'}},questions,'demo-v1'));
+});
+
+const mockBank:Question[]=DOMAINS.flatMap((d,i)=>Array.from({length:40},(_,j)=>({...questions[0],id:`${d.id}-${j}`,number:i*40+j+1,domain:d.id})));
+test('exam allocation follows official weights, exact totals and largest remainders',()=>{
+  assert.deepEqual(examAllocation(50),{security:15,resilience:13,performance:12,cost:10});
+  assert.deepEqual(examAllocation(65),{security:19,resilience:17,performance:16,cost:13});
+  for(let total=1;total<=725;total++) {
+    const allocation=examAllocation(total);assert.equal(Object.values(allocation).reduce((a,b)=>a+b),total);
+    for(const d of DOMAINS) assert.ok(Math.abs(allocation[d.id]-total*d.weight/100)<1);
+  }
+  assert.throws(()=>examAllocation(0));assert.throws(()=>examAllocation(2.5));
+});
+test('mock sampling has no duplicates, exact quotas, and respects manual domains',()=>{
+  const state=freshState();state.progress[mockBank[0].id]={domain:'cost'};
+  for(let run=0;run<25;run++) {
+    const plan=buildMockExam(mockBank,state,65);assert.equal(plan.ids.length,65);assert.equal(new Set(plan.ids).size,65);
+    for(const d of DOMAINS) assert.equal(Object.values(plan.domains).filter(x=>x===d.id).length,examAllocation(65)[d.id]);
+    if(plan.ids.includes(mockBank[0].id)) assert.equal(plan.domains[mockBank[0].id],'cost');
+  }
+  assert.throws(()=>buildMockExam(mockBank.filter(q=>q.domain!=='security'),state,65),/부족/);
+  assert.throws(()=>buildMockExam(questions,freshState(),65),/부족/);
+});
+test('classification uses requirements, ignores distractors, and allows overrides',()=>{
+  const classify=(prompt:string)=>classifyQuestion({...questions[0],domain:undefined,prompt,choices:[{key:'A',text:'solution'},{key:'B',text:'KMS WAF IAM encryption security'}]}).domain;
+  assert.equal(classify('조직 내 계정 사용자로만 액세스를 제한해야 합니다.'),'security');
+  assert.equal(classify('재해 복구 RTO 10분과 RPO 1분을 충족해야 합니다.'),'resilience');
+  assert.equal(classify('분석 쿼리의 성능을 개선하고 대기 시간을 줄여야 합니다.'),'performance');
+  assert.equal(classify('파일을 무기한 보관하는 가장 비용 효율적인 방법은 무엇입니까?'),'cost');
+  assert.equal(classifyQuestion(mockBank[0],'cost').source,'manual');
+  assert.equal(classifyQuestion(mockBank[0],'cost').domain,'cost');
+});
+test('random study covers a whole bank once and survives backup without losing notes or drafts',()=>{
+  const state=freshState();state.progress[mockBank[0].id]={note:'keep',domain:'security'};
+  const random=startRandomStudy(state,mockBank);assert.equal(random.studyOrder!.length,mockBank.length);assert.equal(new Set(random.studyOrder).size,mockBank.length);assert.equal(mockBank[random.studyIndex].id,random.studyOrder![0]);assert.equal(random.progress[mockBank[0].id].note,'keep');
+  random.studyIndex=mockBank.findIndex(q=>q.id===random.studyOrder![12]);random.studyDraft={qid:mockBank[random.studyIndex].id,selected:['A'],revealed:false,graded:false};
+  const restored=validateBackup({app:'saa-study',state:random},mockBank);assert.deepEqual(restored,random);assert.equal(studySequence(mockBank,restored).indexOf(mockBank[restored.studyIndex].id),12);
+  assert.throws(()=>validateBackup({app:'saa-study',state:{...random,studyOrder:random.studyOrder!.slice(1)}},mockBank));
+  assert.throws(()=>validateBackup({app:'saa-study',state:{...random,studyOrder:random.studyOrder!.map(()=>mockBank[0].id)}},mockBank));
+});
+test('timed exams expire even when inactive, grade once, and keep domain snapshots',()=>{
+  const state=freshState(),plan=buildMockExam(mockBank,state,20),start='2026-09-21T00:00:00.000Z',deadline='2026-09-21T00:40:00.000Z';
+  state.sessions=[{id:'mock',mode:'mock',...plan,position:0,answers:{[plan.ids[0]]:['A']},startedAt:start,mock:{durationMinutes:40,deadlineAt:deadline,domains:plan.domains}}];state.activeSessionId='mock';
+  assert.equal(expireMockExams(state,mockBank,Date.parse(deadline)-1),state);
+  const restored=validateBackup({app:'saa-study',state},mockBank);const result=expireMockExams(restored,mockBank,Date.parse(deadline)+10000);
+  assert.equal(result.sessions[0].submittedAt,deadline);assert.equal(result.activeSessionId,null);assert.equal(result.attempts.length,1);assert.equal(result.attempts[0].mode,'mock');assert.equal(expireMockExams(result,mockBank,Date.parse(deadline)+20000),result);
+  assert.deepEqual(validateBackup({app:'saa-study',state:result},mockBank),result);
+  state.activeSessionId=null;assert.ok(expireMockExams(state,mockBank,Date.parse(deadline)).sessions[0].submittedAt);
+  const id=plan.ids[0],before=state.sessions[0].mock!.domains[id];state.progress[id]={domain:before==='cost'?'security':'cost'};assert.equal(state.sessions[0].mock!.domains[id],before);
+  const bad=structuredClone(state);bad.sessions[0].mock!.domains[id]='invalid' as Domain;assert.throws(()=>validateBackup({app:'saa-study',state:bad},mockBank));
+  const badDeadline=structuredClone(state);badDeadline.sessions[0].mock!.deadlineAt=start;assert.throws(()=>validateBackup({app:'saa-study',state:badDeadline},mockBank));
 });
