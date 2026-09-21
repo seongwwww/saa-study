@@ -1,0 +1,32 @@
+{
+  "name": "saa-study-room",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
+    "build": "tsc -b && vite build",
+    "preview": "node scripts/serve.mjs",
+    "test": "node --experimental-strip-types --test src/model.test.ts",
+    "start": "node scripts/start.mjs"
+  },
+  "dependencies": {
+    "dexie": "^4.0.11",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.5"
+  },
+  "description": "Local-first Korean study app with answer toggles, quiz sessions, and mistake review.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.14.0"
+  }
+}

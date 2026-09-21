@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.sites-runtime/
+*.tsbuildinfo
+test-results/
+
+# Personal question banks, source documents and study backups
+*.pdf
+public/questions.json
+public/images/
+extraction-audit.json
+SAA-*.json
+backups/
+private/
+*.log
+.env
+.env.*
+.venv/
+__pycache__/
+.DS_Store
+Thumbs.db
