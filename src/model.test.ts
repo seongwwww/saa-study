@@ -28,7 +28,9 @@ test('submission is atomic, skips unanswered questions, and cannot double-count'
 test('wrong history is retained after two distinct correct sessions; unsure overrides mastery',()=>{
   const s=freshState(),qid=questions[0].id;
   const add=(correct:boolean,id:string)=>s.attempts.push({id,qid,selected:correct?['A']:['B'],correct,at:'2026-09-21T00:00:00Z',mode:'review',sessionId:id});
-  add(false,'1');add(true,'2');assert.equal(getStatus(qid,s).needsReview,true);add(true,'3');assert.equal(getStatus(qid,s).needsReview,false);assert.equal(getStatus(qid,s).everWrong,true);s.progress[qid]={unsure:true};assert.equal(getStatus(qid,s).needsReview,true);
+  add(false,'1');assert.equal(getStatus(qid,s).correct,0);
+  add(true,'2');assert.equal(getStatus(qid,s).correct,1);assert.equal(getStatus(qid,s).needsReview,true);
+  add(true,'3');assert.equal(getStatus(qid,s).correct,2);assert.equal(getStatus(qid,s).needsReview,false);assert.equal(getStatus(qid,s).everWrong,true);s.progress[qid]={unsure:true};assert.equal(getStatus(qid,s).needsReview,true);
 });
 test('backup round trip preserves drafts, notes and in-progress sessions; rejects bad data',()=>{
   const state:StudyState=freshState();state.progress[questions[0].id]={bookmark:true,note:'메모',unsure:true};state.studyDraft={qid:questions[0].id,selected:['A'],revealed:false,graded:false};

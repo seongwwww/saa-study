@@ -12,13 +12,14 @@ export function isCorrect(selected: string[], correct: string[]) {
 export function getStatus(qid: string, state: StudyState) {
   const attempts = state.attempts.filter(a => a.qid === qid);
   const everWrong = attempts.some(a => !a.correct);
+  const correct = attempts.filter(a => a.correct).length;
   let streak = 0;
   const sessions = new Set<string>();
   for (const a of [...attempts].reverse()) {
     if (!a.correct) break;
     if (!sessions.has(a.sessionId)) { streak++; sessions.add(a.sessionId); }
   }
-  return { attempts, everWrong, streak, needsReview: Boolean(state.progress[qid]?.unsure || (everWrong && streak < 2)), latest: attempts.at(-1) };
+  return { attempts, everWrong, correct, streak, needsReview: Boolean(state.progress[qid]?.unsure || (everWrong && streak < 2)), latest: attempts.at(-1) };
 }
 export function submitSession(state: StudyState, sessionId: string, questions: Question[], now = new Date().toISOString()): StudyState {
   const session = state.sessions.find(s => s.id === sessionId);
